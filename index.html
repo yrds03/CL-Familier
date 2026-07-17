@@ -52,7 +52,7 @@
   <div class="header">
     <h4 class="m-0 fw-bold fs-5"><i class="fas fa-store text-warning me-2"></i> CL FAMILI_ER <span id="ui-role" class="badge bg-secondary fs-6 ms-1">ROLE</span></h4>
     <div>
-      <button class="btn btn-info btn-sm fw-bold px-3 py-2 me-1 shadow-sm" onclick="hubungkanBluetoothNative()"><i class="fab fa-bluetooth"></i> KONEK BT</button>
+      <button id="btn-bt" class="btn btn-info btn-sm fw-bold px-3 py-2 me-1 shadow-sm" onclick="hubungkanBluetoothNative()"><i class="fab fa-bluetooth"></i> KONEK BT</button>
       <button class="btn btn-danger btn-sm fw-bold px-3 py-2 shadow-sm" onclick="logoutAman()"><i class="fas fa-sign-out-alt"></i> KELUAR</button>
     </div>
   </div>
@@ -86,14 +86,18 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js').
 var sessionInfo = { user: "", role: "", nama: "" };
 var catalogGlobal = []; var pelangganGlobal = []; var cart = [];
 
+// PERBAIKAN: Menggunakan localStorage agar sesi Login tidak hilang saat di-refresh
 window.onload = function() {
   try {
-    var savedUser = sessionStorage.getItem('fb_user');
+    var savedUser = localStorage.getItem('fb_user');
     if (savedUser) {
-      sessionInfo = { user: savedUser, role: sessionStorage.getItem('fb_role'), nama: sessionStorage.getItem('fb_nama') };
+      sessionInfo = { user: savedUser, role: localStorage.getItem('fb_role'), nama: localStorage.getItem('fb_nama') };
       document.getElementById('ui-role').innerText = sessionInfo.role;
       document.getElementById('login-screen').style.display = 'none'; document.getElementById('main-app').style.display = 'flex';
       routeLayarByRole(); 
+      // Indikator BT terputus karena refresh
+      document.getElementById('btn-bt').className = 'btn btn-danger btn-sm fw-bold px-3 py-2 me-1 shadow-sm';
+      document.getElementById('btn-bt').innerHTML = '<i class="fab fa-bluetooth"></i> BT TERPUTUS';
     }
   } catch(e) {}
 };
@@ -101,7 +105,7 @@ window.onload = function() {
 function toRp(num) { return 'Rp ' + Number(num).toLocaleString('id-ID'); }
 
 /* ==================================================================== */
-/* FITUR NATIVE WEB BLUETOOTH API                                       */
+/* FITUR NATIVE WEB BLUETOOTH API + INDIKATOR WARNA                     */
 /* ==================================================================== */
 var btDevice = null; var btCharacteristic = null;
 
@@ -109,11 +113,25 @@ async function hubungkanBluetoothNative() {
   if (!navigator.bluetooth) return Swal.fire('Gagal', 'Browser HP ini tidak mendukung Web Bluetooth API.', 'error');
   try {
     btDevice = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2'] });
+    
+    // Deteksi jika Bluetooth terputus mendadak
+    btDevice.addEventListener('gattserverdisconnected', function() {
+      btCharacteristic = null;
+      document.getElementById('btn-bt').className = 'btn btn-danger btn-sm fw-bold px-3 py-2 me-1 shadow-sm';
+      document.getElementById('btn-bt').innerHTML = '<i class="fab fa-bluetooth"></i> BT TERPUTUS';
+    });
+
     var server = await btDevice.gatt.connect();
     var service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb').catch(() => null) || await server.getPrimaryService('e7810a71-73ae-499d-8c15-faa9aef0c3f2');
     btCharacteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb').catch(() => null) || await service.getCharacteristics().then(chars => chars[0]);
+    
+    // Ubah UI Tombol jadi Hijau saat sukses
+    document.getElementById('btn-bt').className = 'btn btn-success btn-sm fw-bold px-3 py-2 me-1 shadow-sm';
+    document.getElementById('btn-bt').innerHTML = '<i class="fab fa-bluetooth"></i> BT KONEK &nbsp;<i class="fas fa-check"></i>';
     Swal.fire('Sukses', 'Printer terhubung lewat Native Web Bluetooth!', 'success');
-  } catch(e) { Swal.fire('Peringatan Chrome', 'Gagal terkoneksi: ' + e.message, 'warning'); }
+  } catch(e) { 
+    Swal.fire('Peringatan Chrome', 'Gagal terkoneksi: ' + e.message, 'warning'); 
+  }
 }
 
 async function cetakNativeText(teksNota) {
@@ -124,6 +142,7 @@ async function cetakNativeText(teksNota) {
   return true;
 }
 
+// PERBAIKAN: Menyimpan sesi ke localStorage
 async function verifikasiLoginAman() {
   var u = document.getElementById('log-user').value.trim(); var p = document.getElementById('log-pass').value.trim();
   if(!u || !p) return alert("Wajib diisi!");
@@ -133,14 +152,15 @@ async function verifikasiLoginAman() {
   
   if(res.status === 'success') {
     sessionInfo = { user: u, role: res.role, nama: res.nama };
-    sessionStorage.setItem('fb_user', u); sessionStorage.setItem('fb_role', res.role); sessionStorage.setItem('fb_nama', res.nama);
+    localStorage.setItem('fb_user', u); localStorage.setItem('fb_role', res.role); localStorage.setItem('fb_nama', res.nama);
     document.getElementById('ui-role').innerText = res.role;
     document.getElementById('login-screen').style.display = 'none'; document.getElementById('main-app').style.display = 'flex'; routeLayarByRole();
   } else { Swal.fire('Gagal', res.msg, 'error'); }
 }
 
+// PERBAIKAN: Menghapus sesi permanen saat klik Keluar
 function logoutAman() {
-  sessionStorage.clear();
+  localStorage.clear();
   document.getElementById('main-app').style.display = 'none'; document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('log-user').value = ''; document.getElementById('log-pass').value = '';
 }
